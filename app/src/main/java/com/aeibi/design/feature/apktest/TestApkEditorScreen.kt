@@ -36,7 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aeibi.design.theme.spacing
 
 /**
- * 临时调试界面：手动触发 APK 手术链路。
+ * 临时调试界面：手动触发 APK 导出。
  * 正式版移除。
  */
 @Composable
@@ -111,7 +111,7 @@ fun TestApkEditorScreen(modifier: Modifier = Modifier, onBackClick: () -> Unit =
                     modifier = Modifier.fillMaxWidth(),
                     enabled = uiState.templatePath != null && !uiState.isBuilding && !uiState.isPreviewingStructure
                 ) {
-                    Text(if (uiState.isPreviewingStructure) "解码中…" else "查看文件结构")
+                    Text(if (uiState.isPreviewingStructure) "读取中…" else "查看文件结构")
                 }
             }
             uiState.structure?.let { structure ->
