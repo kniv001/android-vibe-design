@@ -85,6 +85,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     // APK 构建引擎（ARSCLib 重定位版，kniv001 fork）
     implementation(libs.arsc.lib)
+    implementation(libs.androidx.webkit)
     // Local static file server
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
