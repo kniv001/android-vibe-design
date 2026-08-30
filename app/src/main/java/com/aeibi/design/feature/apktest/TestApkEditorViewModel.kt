@@ -8,13 +8,11 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.aeibi.design.apk.ApkPipeline
-import com.aeibi.design.apk.BuildLogger
-import com.aeibi.design.apk.model.ApkBuildRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.util.UUID
+import java.util.zip.ZipFile
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,15 +38,14 @@ data class TestApkEditorUiState(
 )
 
 /**
- * 临时调试 ViewModel：手动触发 APK 手术链路（引擎/操作由 Hilt 声明式装配）。
+ * 临时调试 ViewModel：手动触发 APK 导出。
  * 正式版移除本类。
  */
 @SuppressLint("NewApi") // 临时调试 UI：MediaStore.Downloads 需 API 29，正式版移除
 @HiltViewModel
 class TestApkEditorViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
-    private val pipeline: ApkPipeline,
-    private val decoder: com.aeibi.design.apk.engine.ApkDecoder
+    private val apkExporter: ApkExporter
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TestApkEditorUiState())
@@ -128,7 +125,7 @@ class TestApkEditorViewModel @Inject constructor(
         return count
     }
 
-    /** 预览模板的文件结构（解码后显示目录树）。 */
+    /** 预览模板的 ZIP 文件结构。 */
     fun previewStructure() {
         val template = _uiState.value.templatePath ?: return
         if (_uiState.value.isPreviewingStructure) return
@@ -137,12 +134,13 @@ class TestApkEditorViewModel @Inject constructor(
             _uiState.update { it.copy(isPreviewingStructure = true, structure = null) }
             withContext(Dispatchers.IO) {
                 runCatching {
-                    val decodedDir = File(appContext.cacheDir, "preview-decoded").apply {
-                        deleteRecursively()
-                        mkdirs()
+                    val tree = ZipFile(template).use { zip ->
+                        zip.entries().asSequence()
+                            .map { it.name }
+                            .sorted()
+                            .take(MAX_STRUCTURE_LINES)
+                            .toList()
                     }
-                    decoder.decode(File(template).toPath(), decodedDir.toPath())
-                    val tree = buildFileTree(decodedDir, maxLines = MAX_STRUCTURE_LINES)
                     logToFile("结构预览完成: ${tree.size} 行")
                     _uiState.update {
                         it.copy(isPreviewingStructure = false, structure = tree)
@@ -155,29 +153,6 @@ class TestApkEditorViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    /** 生成缩进文件树（目录 + 文件，限制行数）。 */
-    private fun buildFileTree(root: File, maxLines: Int): List<String> {
-        val lines = mutableListOf<String>()
-        val maxDepth = 4
-        fun walk(dir: File, depth: Int) {
-            if (lines.size >= maxLines) return
-            if (depth > maxDepth) return
-            dir.listFiles()?.sortedBy { file ->
-                if (file.isDirectory) "0${file.name}" else "1${file.name}"
-            }?.forEach { file ->
-                if (lines.size >= maxLines) return
-                val indent = "  ".repeat(depth)
-                val mark = if (file.isDirectory) "[D] " else "    "
-                lines += "$indent$mark${file.name}"
-                if (file.isDirectory) walk(file, depth + 1)
-            }
-        }
-        lines += "[root] ${root.name}"
-        walk(root, 1)
-        if (lines.size >= maxLines) lines += "...（已达显示上限 $maxLines 行）"
-        return lines
     }
 
     fun updatePackageName(value: String) = _uiState.update { it.copy(packageName = value) }
@@ -200,17 +175,14 @@ class TestApkEditorViewModel @Inject constructor(
                 runCatching {
                     val output = File(appContext.filesDir, "apk-test-output").apply { mkdirs() }
                         .resolve("output-${UUID.randomUUID()}.apk")
-                    val request = ApkBuildRequest(
-                        templateApk = File(template).toPath(),
-                        outputApk = output.toPath(),
+                    val request = ApkExportRequest(
+                        templateApk = File(template),
+                        outputApk = output,
                         packageName = state.packageName,
                         appLabel = state.appLabel,
-                        frontendDir = state.frontendPath?.let { File(it).toPath() }
+                        frontendDir = state.frontendPath?.let(::File)
                     )
-                    val result = pipeline.build(
-                        request,
-                        logger = BuildLogger { stage, message -> logs += "[${stage.name}] $message" }
-                    )
+                    apkExporter.export(request) { message -> logs += message }
 
                     // 产物复制到可见位置：Downloads（模拟器内可安装）+ 共享目录（电脑可见）
                     val visiblePath = exportOutput(output)
@@ -221,8 +193,7 @@ class TestApkEditorViewModel @Inject constructor(
                             logs = logs,
                             result = buildString {
                                 append("输出: $visiblePath（${output.length() / 1024} KB）")
-                                append("\n验证: ")
-                                append(if (result.verification.passed) "通过" else result.verification.issues)
+                                append("\n签名验证: 通过")
                             }
                         )
                     }

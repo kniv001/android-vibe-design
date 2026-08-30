@@ -103,6 +103,10 @@ androidComponents {
     }
 }
 
+tasks.matching { it.name == "testDebugUnitTest" }.configureEach {
+    dependsOn(":shell:assembleDebug")
+}
+
 kotlin {
     jvmToolchain(17)
     compilerOptions {
