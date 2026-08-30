@@ -61,7 +61,7 @@ androidx-hilt-lifecycle-viewmodel-compose = { module = "androidx.hilt:hilt-lifec
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "dataStore" }
 ucrop = { module = "com.github.yalantis:ucrop", version.ref = "ucrop" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentFile" }
-arsc-lib = { module = "io.github.reandroid:ARSCLib", version.ref = "arscLib" }
+arsc-lib = { module = "com.github.kniv001:ARSCLib", version = "android-1.4.0" }
 apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 [plugins]

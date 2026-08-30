@@ -7,55 +7,8 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
-
-// ---- ARSCLib：Maven 依赖 + 构建期剔除 Android 冲突类 ----
-// ARSCLib 的 jar 内含 android.util.AttributeSet / org.xmlpull.v1.* 等
-// 与 Android 平台重复的类，直接依赖会编译冲突。
-// 构建期把冲突类从 jar 剔除，编译/运行回落到 Android 平台实现。
-val arscLibJar by configurations.creating
-
-abstract class StripAndroidClassesTask : DefaultTask() {
-    @get:InputFiles
-    abstract val input: ConfigurableFileCollection
-
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
-
-    @TaskAction
-    fun strip() {
-        val source = input.singleFile
-        val output = outputDir.get().asFile.resolve("ARSCLib-stripped.jar")
-        ZipFile(source).use { zip ->
-            ZipOutputStream(output.outputStream().buffered()).use { out ->
-                zip.entries().asSequence().forEach { entry ->
-                    val name = entry.name
-                    if (name.startsWith("android/") || name.startsWith("org/xmlpull/")) {
-                        return@forEach
-                    }
-                    out.putNextEntry(ZipEntry(name))
-                    zip.getInputStream(entry).copyTo(out)
-                    out.closeEntry()
-                }
-            }
-        }
-    }
-}
-
-val stripArscLib = tasks.register<StripAndroidClassesTask>("stripArscLib") {
-    input.from(arscLibJar)
-    outputDir.set(layout.buildDirectory.dir("stripped-arsclib"))
-}
-
-val strippedJar = stripArscLib.map { it.outputDir.get().asFile.resolve("ARSCLib-stripped.jar") }
-
-dependencies {
-    arscLibJar(libs.arsc.lib)
-    implementation(files(strippedJar))
-}
-
+// ARSCLib 依赖：kniv001 fork 的重定位版（com.reandroid.shadow.* 影子类），
+// 与 Android 平台类无冲突，直接依赖即可（见 gradle/libs.versions.toml arsc-lib）
 android {
     namespace = "com.aeibi.design"
     compileSdk = 37
@@ -130,6 +83,8 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.5.0")
     // Serialization
     implementation(libs.kotlinx.serialization.json)
+    // APK 构建引擎（ARSCLib 重定位版，kniv001 fork）
+    implementation(libs.arsc.lib)
     // Local static file server
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
