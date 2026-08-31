@@ -77,4 +77,48 @@ class ApkExporterTest {
             )
         }
     }
+
+    @Test
+    fun packageScoped_attributesFollowButClassNamesPreserved() {
+        val tempDir = Files.createTempDirectory("apk-exporter-scoped").toFile()
+        val output = File(tempDir, "output.apk")
+        val template = extractResourceTemplate("templates/package-scoped.apk", tempDir)
+
+        ApkExporter(File(tempDir, "files"), File(tempDir, "cache")).export(
+            ApkExportRequest(
+                templateApk = template,
+                outputApk = output,
+                packageName = "com.vibetest.newpkg"
+            )
+        )
+
+        ApkModule.loadApkFile(output).use { module ->
+            assertEquals("com.vibetest.newpkg", module.packageName)
+            // 最小模板的 resources.arsc 无 package 块，serializeToXml 不可用——遍历属性断言
+            val values = mutableListOf<String>()
+            val attributes = module.androidManifest.recursiveAttributes()
+            while (attributes.hasNext()) {
+                attributes.next().valueAsString?.let(values::add)
+            }
+            val joined = values.joinToString("\n")
+            // 包名作用域属性跟随
+            assertTrue("permission 未跟随: $joined", values.contains("com.vibetest.newpkg.permission.CUSTOM"))
+            assertTrue("authorities 未跟随: $joined", values.contains("com.vibetest.newpkg.provider"))
+            assertTrue("split 未跟随: $joined", values.contains("com.vibetest.newpkg.splita"))
+            assertTrue("process 未跟随: $joined", values.contains("com.vibetest.newpkg.main"))
+            // ${applicationId} 占位符 → 新包名
+            assertTrue("占位符未替换: $joined", values.contains("com.vibetest.newpkg.dynamic"))
+            // 类名保留（dex 未变）
+            assertTrue("activity 类名被改: $joined", values.contains("com.vibetest.tpl.Main"))
+            assertTrue("provider 类名被改: $joined", values.contains("com.vibetest.tpl.Provider"))
+        }
+    }
+
+    private fun extractResourceTemplate(resource: String, dir: File): File {
+        val target = File(dir, "template.apk")
+        javaClass.getResourceAsStream("/$resource")!!.use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        }
+        return target
+    }
 }
