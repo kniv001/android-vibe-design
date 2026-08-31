@@ -73,6 +73,10 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.webkit)
     implementation(libs.ucrop)
+    // APK 导出（ApkExporter：ARSCLib 内存直改 + apksig 签名）
+    implementation(libs.arsc.lib)
+    implementation(libs.apksig)
+    implementation(libs.bouncycastle)
 
     // Compose
     implementation(libs.androidx.compose.ui)
