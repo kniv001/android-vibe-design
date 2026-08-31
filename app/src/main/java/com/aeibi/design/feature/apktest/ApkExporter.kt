@@ -141,11 +141,19 @@ class ApkExporter internal constructor(
                 attribute.equalsNameId(AndroidManifest.ID_name) &&
                     parentTag in setOf("permission", "uses-permission")
             val packageScopedAuthority = attribute.equalsNameId(AndroidManifest.ID_authorities)
-            if (!packageScopedName && !packageScopedAuthority) continue
+            // 包名作用域的按名匹配属性（ARSCLib 无对应 ID 常量，按属性名判断）
+            val packageScopedByName = attribute.name in PACKAGE_SCOPED_ATTRIBUTE_NAMES
+            if (!packageScopedName && !packageScopedAuthority && !packageScopedByName) continue
 
             val value = attribute.valueAsString ?: continue
-            if (value.contains(oldPackage)) {
-                attribute.setValueAsString(value.replace(oldPackage, newPackage))
+            when {
+                value.contains(oldPackage) -> {
+                    attribute.setValueAsString(value.replace(oldPackage, newPackage))
+                }
+                value.contains(PACKAGE_PLACEHOLDER) -> {
+                    // 库模板的 ${applicationId} 占位符 → 新包名
+                    attribute.setValueAsString(value.replace(PACKAGE_PLACEHOLDER, newPackage))
+                }
             }
         }
     }
@@ -260,6 +268,16 @@ class ApkExporter internal constructor(
             require(module.zipEntryMap.listInputSources().any { it.alias.endsWith(".dex") }) {
                 "Exported APK is missing dex files"
             }
+            request.frontendDir?.let { dir ->
+                require(module.zipEntryMap.listInputSources().any { it.alias.startsWith(FRONTEND_PREFIX) }) {
+                    "Exported APK is missing frontend assets"
+                }
+            }
+            request.config?.let {
+                require(module.zipEntryMap.listInputSources().any { source -> source.alias == CONFIG_PATH }) {
+                    "Exported APK is missing app config"
+                }
+            }
         }
     }
 
@@ -294,6 +312,8 @@ class ApkExporter internal constructor(
         const val CONFIG_PATH = "assets/app_config.json"
         const val LIB_PREFIX = "lib/"
         const val MIPMAP_PREFIX = "res/mipmap"
+        val PACKAGE_SCOPED_ATTRIBUTE_NAMES = setOf("split", "taskAffinity", "process", "targetPackage")
+        const val PACKAGE_PLACEHOLDER = "\${applicationId}"
         val LAUNCHER_ICON_NAMES = setOf("ic_launcher", "ic_launcher_round")
         val BITMAP_EXTENSIONS = setOf("png", "webp", "jpg", "jpeg")
         const val KEYSTORE_FILE = "apk-export-key.p12"
