@@ -142,4 +142,52 @@ class SessionRepositoryTest {
         )
         assertEquals(listOf("Hello"), repository.loadModelMessages("session").map { it.textContent() })
     }
+
+    @Test
+    fun cancelledTurnReplaysPartialResponseAsAssistantMessage() = runTest {
+        val repository = SessionRepository(InMemorySessionDao())
+        repository.appendMessage(
+            "session",
+            "turn",
+            MessageOrigin.USER,
+            Message.User("Write a long story", RequestMetaInfo.Empty)
+        )
+        repository.finishTurn(
+            sessionId = "session",
+            turnId = "turn",
+            status = TurnStatus.CANCELLED,
+            partialResponse = "Once upon a time, there was a brave",
+            partialReasoning = null
+        )
+
+        val messages = repository.loadModelMessages("session")
+
+        assertEquals(
+            listOf(
+                "Write a long story",
+                "Once upon a time, there was a brave",
+                "The previous turn was interrupted on purpose. Any interrupted tool calls may have partially executed. Inspect the workspace before continuing."
+            ),
+            messages.map { it.textContent() }
+        )
+        // partial 以 assistant 角色重放（模型视为自己的历史输出）
+        assertTrue("partial 应以 assistant 角色重放", messages[1] is Message.Assistant)
+    }
+
+    @Test
+    fun cancelledTurnWithoutPartialSkipsAssistantReplay() = runTest {
+        val repository = SessionRepository(InMemorySessionDao())
+        repository.appendMessage(
+            "session",
+            "turn",
+            MessageOrigin.USER,
+            Message.User("Ask me something", RequestMetaInfo.Empty)
+        )
+        repository.finishTurn("session", "turn", TurnStatus.CANCELLED)
+
+        val texts = repository.loadModelMessages("session").map { it.textContent() }
+        // 无 partial → 只有用户消息 + 中断提示
+        assertEquals(2, texts.size)
+        assertTrue(texts[1].contains("interrupted"))
+    }
 }

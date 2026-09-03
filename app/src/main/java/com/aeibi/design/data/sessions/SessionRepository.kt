@@ -3,6 +3,7 @@ package com.aeibi.design.data.sessions
 import ai.koog.prompt.message.Message
 import ai.koog.prompt.message.MessagePart
 import ai.koog.prompt.message.RequestMetaInfo
+import ai.koog.prompt.message.ResponseMetaInfo
 import jakarta.inject.Inject
 import jakarta.inject.Singleton
 import kotlinx.coroutines.NonCancellable
@@ -79,7 +80,16 @@ class SessionRepository @Inject constructor(private val sessionDao: SessionDao) 
                     messages = decodeContextReplacement(entry).messages.toMutableList()
                 }
                 SessionEntryType.TURN_FINISHED -> {
-                    if (decodeTurnFinished(entry).status == TurnStatus.CANCELLED) {
+                    val payload = decodeTurnFinished(entry)
+                    if (payload.status == TurnStatus.CANCELLED) {
+                        // partial 回复作为 assistant 消息重放——模型视为自己的历史输出，
+                        // 避免取消后重发时重复生成用户已看到的部分（issue: preserve partial output）
+                        payload.partialResponse?.takeIf(String::isNotBlank)?.let { partial ->
+                            messages += Message.Assistant(
+                                parts = listOf(MessagePart.Text(partial)),
+                                metaInfo = ResponseMetaInfo.Empty
+                            )
+                        }
                         messages += Message.User(INTERRUPTED_TURN_CONTEXT, RequestMetaInfo.Empty)
                     }
                 }

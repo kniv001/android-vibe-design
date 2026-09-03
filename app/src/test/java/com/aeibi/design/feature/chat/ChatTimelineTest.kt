@@ -139,6 +139,8 @@ class ChatTimelineTest {
         assertEquals(
             listOf(
                 "Hello",
+                // partial 回复以 assistant 消息重放——模型保留对旧需求的理解轨迹（需求重述/回退的锚）
+                "Partial answer",
                 "The previous turn was interrupted on purpose. Any interrupted tool calls may have partially executed. Inspect the workspace before continuing."
             ),
             repository.loadModelMessages("session").map { it.textContent() }
