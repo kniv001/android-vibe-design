@@ -95,15 +95,16 @@ fun ProjectWorkspaceScreen(
             viewModel.exportWorkspace(projectId, outputFile) { result ->
                 result
                     .onSuccess { file ->
-                        runCatching {
+                        // 写入用户所选位置可能失败（权限/存储）——成功才提示已导出。
+                        val writeResult = runCatching {
                             context.contentResolver.openOutputStream(uri)?.use { out ->
                                 file.inputStream().use { it.copyTo(out) }
                             } ?: error("Cannot open export destination")
-                        }.onFailure {
-                            scope.launch { snackbarHostState.showSnackbar(exportFailedText) }
                         }
                         file.delete()
-                        scope.launch { snackbarHostState.showSnackbar(exportSavedText) }
+                        writeResult
+                            .onSuccess { scope.launch { snackbarHostState.showSnackbar(exportSavedText) } }
+                            .onFailure { scope.launch { snackbarHostState.showSnackbar(exportFailedText) } }
                     }
                     .onFailure {
                         scope.launch { snackbarHostState.showSnackbar(exportFailedText) }
