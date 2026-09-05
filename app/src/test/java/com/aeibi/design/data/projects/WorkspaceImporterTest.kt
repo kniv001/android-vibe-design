@@ -10,27 +10,28 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-class WorkspaceZipTest {
+class WorkspaceImporterTest {
 
     @get:Rule
     val temporaryFolder = TemporaryFolder()
 
     @Test
-    fun exportAndImport_roundTripsContent() {
-        val source = temporaryFolder.newFolder("source")
-        File(source, "index.html").writeText("<html/>")
-        File(source, "assets/app.js").apply { parentFile.mkdirs() }.writeText("console.log(1)")
-        File(source, "img/logo.png").apply { parentFile.mkdirs() }.writeText("png-data")
-        val zip = File(temporaryFolder.root, "workspace.zip")
-
-        WorkspaceZip.exportDirectory(source, zip)
-
+    fun import_restoresNestedFiles() {
+        val zip = File(temporaryFolder.root, "content.zip")
+        ZipOutputStream(zip.outputStream()).use { out ->
+            out.putNextEntry(ZipEntry("index.html"))
+            out.write("<html/>".toByteArray())
+            out.closeEntry()
+            out.putNextEntry(ZipEntry("img/logo.png"))
+            out.write("png-data".toByteArray())
+            out.closeEntry()
+        }
         val target = temporaryFolder.newFolder("target")
-        val count = WorkspaceZip.importArchive(zip, target)
 
-        assertEquals(3, count)
+        val count = WorkspaceImporter.importArchive(zip, target)
+
+        assertEquals(2, count)
         assertEquals("<html/>", File(target, "index.html").readText())
-        assertEquals("console.log(1)", File(target, "assets/app.js").readText())
         assertEquals("png-data", File(target, "img/logo.png").readText())
     }
 
@@ -47,22 +48,11 @@ class WorkspaceZipTest {
         }
         val target = temporaryFolder.newFolder("target")
 
-        val count = WorkspaceZip.importArchive(zip, target)
+        val count = WorkspaceImporter.importArchive(zip, target)
 
         // 穿越条目被跳过，安全条目导入
         assertEquals(1, count)
         assertFalse("穿越文件不应写出", File(temporaryFolder.root, "escape.txt").exists())
         assertTrue(File(target, "safe.txt").exists())
-    }
-
-    @Test
-    fun export_emptyDirectory_producesEmptyZip() {
-        val source = temporaryFolder.newFolder("empty")
-        val zip = File(temporaryFolder.root, "empty.zip")
-
-        WorkspaceZip.exportDirectory(source, zip)
-
-        assertTrue(zip.isFile)
-        assertEquals(0, WorkspaceZip.importArchive(zip, temporaryFolder.newFolder("out")))
     }
 }

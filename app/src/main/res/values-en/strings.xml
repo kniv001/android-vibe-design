@@ -99,9 +99,8 @@
     <!-- Project setup -->
     <string name="project_setup_title">Project setup</string>
     <string name="project_setup_template_title">Start from a template</string>
-    <string name="project_setup_start_blank">Blank template</string>
-    <string name="project_setup_custom_title">Custom template</string>
-    <string name="project_setup_import_template">Import template (zip)</string>
+    <string name="project_setup_start_blank">Start with a blank project</string>
+    <string name="project_setup_import_template">Import project from zip</string>
     <string name="project_setup_start_failed">Could not initialize the project. Try again</string>
     <!-- Template gallery -->
     <string name="template_gallery_title">Choose a template</string>

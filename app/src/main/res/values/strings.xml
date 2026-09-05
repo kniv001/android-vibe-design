@@ -99,9 +99,8 @@
     <!-- Project setup -->
     <string name="project_setup_title">项目初始化</string>
     <string name="project_setup_template_title">从模板开始</string>
-    <string name="project_setup_start_blank">空白模板</string>
-    <string name="project_setup_custom_title">自定义模板</string>
-    <string name="project_setup_import_template">导入模板（zip）</string>
+    <string name="project_setup_start_blank">从空白项目开始</string>
+    <string name="project_setup_import_template">从 zip 导入项目</string>
     <string name="project_setup_start_failed">无法初始化项目，请重试</string>
     <!-- Template gallery -->
     <string name="template_gallery_title">选择模板</string>

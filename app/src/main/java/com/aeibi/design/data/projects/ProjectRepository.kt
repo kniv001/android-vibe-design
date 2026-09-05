@@ -158,7 +158,7 @@ class ProjectRepository(
     /** 从 zip 文件导入初始化（本地/测试路径）。 */
     suspend fun initializeFromZip(id: String, zipFile: File) = withContext(ioDispatcher) {
         if (!zipFile.isFile) throw IOException("Zip not found: $zipFile")
-        initializeFromZipStream(id) { WorkspaceZip.importArchive(zipFile, it) }
+        initializeFromZipStream(id) { WorkspaceImporter.importArchive(zipFile, it) }
     }
 
     /** 从 SAF uri 导入初始化（导入模板/项目包 zip）。 */
@@ -166,7 +166,7 @@ class ProjectRepository(
         val input = contentResolver.openInputStream(uri)
             ?: throw IOException("Cannot open import file: $uri")
         input.use { stream ->
-            initializeFromZipStream(id) { dir -> WorkspaceZip.importArchive(stream, dir) }
+            initializeFromZipStream(id) { dir -> WorkspaceImporter.importArchive(stream, dir) }
         }
     }
 
@@ -204,7 +204,7 @@ class ProjectRepository(
     suspend fun exportWorkspace(id: String, zipFile: File) = withContext(ioDispatcher) {
         val workspace = workspaceDirectory(id)
         if (!workspace.isDirectory) throw IOException("Workspace not found: $id")
-        WorkspaceZip.exportDirectory(workspace, zipFile)
+        WorkspaceExporter.exportDirectory(workspace, zipFile)
     }
 
     private fun listProjects(): List<Project> = projectsDir.listFiles()
