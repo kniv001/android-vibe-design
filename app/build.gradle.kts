@@ -79,9 +79,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.webkit)
     implementation(libs.ucrop)
-    implementation(libs.markwon.core)
-    implementation(libs.markwon.ext.tables)
-    implementation(libs.markwon.ext.strikethrough)
+    implementation(libs.markdown.renderer.m3)
 
     // Compose
     implementation(libs.androidx.compose.ui)
