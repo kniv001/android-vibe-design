@@ -170,8 +170,8 @@ class ProjectWorkspaceViewModel internal constructor(
     }
 
     /**
-     * 组装错误报告消息文本（marker 首行 = 折叠摘要，正文 = 时间轴 + err 表格）。
-     * 发送给 AI 的这条用户消息自描述——agent 可读表格，长详情仍由 read_runtime_logs 提供。
+     * 组装错误报告文本（摘要行 + 时间轴表格）——预填到聊天输入框由用户编辑后发送。
+     * 文本自描述（agent 可读表格），长详情仍由 read_runtime_logs 提供。
      */
     fun buildErrorReportText(): String? {
         val error = _previewUiState.value.pageError ?: return null
@@ -179,7 +179,7 @@ class ProjectWorkspaceViewModel internal constructor(
         if (details.isEmpty()) return null
         val summaryTime = TIME_FORMAT.format(Date(error.atMillis))
         val lines = buildString {
-            append("[error-report] Preview load failure — ")
+            append("Preview load failure — ")
             append("${error.count} error(s) on ${error.file} at $summaryTime\n\n")
             append("| # | Time | Error | File |\n")
             append("|---|------|-------|------|\n")

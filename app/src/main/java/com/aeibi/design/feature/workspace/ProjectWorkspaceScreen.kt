@@ -152,11 +152,12 @@ fun ProjectWorkspaceScreen(
             onFullscreenClick = { fullscreen = true },
             onConsoleClick = { pane = WorkspacePane.CONSOLE },
             onReportErrorToAi = { _ ->
-                // 报告文本（折叠摘要 + 时间轴表格）在 VM 组装；发送前取文本，dismiss 会清明细。
+                // 「添加到聊天」：报告作为输入框上方的折叠附件（用户可展开查看/移除），
+                // 发送时并入消息——不直接进上下文；截图/引用等同类功能都走这个入口。
                 val reportText = workspaceViewModel.buildErrorReportText()
                 workspaceViewModel.dismissPageError()
                 if (reportText != null) {
-                    chatViewModel.sendText(reportText, onSessionCreated = { selectedSessionId = it })
+                    chatViewModel.attachDraft(reportText)
                 }
                 pane = WorkspacePane.CHAT
             }

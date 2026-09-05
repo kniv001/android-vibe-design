@@ -54,9 +54,6 @@ sealed interface ChatTimelineItem {
 
     data class Thinking(override val id: String, val text: String, val isStreaming: Boolean = false) : ChatTimelineItem
 
-    /** 预览加载失败报告——用户消息形态的折叠块：收起显示摘要，展开显示时间轴 + err 表格。 */
-    data class ErrorReport(override val id: String, val summary: String, val body: String) : ChatTimelineItem
-
     data class ToolCall(override val id: String, val name: String) : ChatTimelineItem
 
     data class ToolResult(override val id: String, val name: String, val isError: Boolean) : ChatTimelineItem
@@ -70,10 +67,18 @@ data class ChatUiState(
     val streamingResponses: List<StreamingResponse> = emptyList(),
     val streamingText: String? = null,
     val streamingStatus: ChatMessageStatus = ChatMessageStatus.WORKING,
-    val isRunning: Boolean = false
+    val isRunning: Boolean = false,
+    /** 待发送附件（输入框上方折叠条），发送时并入消息正文。 */
+    val attachment: PendingAttachment? = null
 )
 
 data class StreamingResponse(val id: Int, val thinkingText: String = "", val text: String = "")
+
+/**
+ * 待发送附件——输入框上方可折叠的引用条（错误报告/未来的截图/文件引用都走这里）。
+ * 发送时随用户输入一起作为消息正文发出。
+ */
+data class PendingAttachment(val title: String, val body: String)
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
@@ -122,17 +127,30 @@ class ChatViewModel @Inject constructor(
         _uiState.update { it.copy(input = value) }
     }
 
-    fun send(onSessionCreated: (String) -> Unit = {}) {
-        val input = _uiState.value.input.trim()
-        if (input.isEmpty()) return
-        sendText(input, onSessionCreated)
+    /** 添加待发送附件（首行作折叠标题，其余作正文）——「添加到聊天」入口。 */
+    fun attachDraft(text: String) {
+        val lines = text.lineSequence().map(String::trimEnd).toList()
+        val title = lines.firstOrNull()?.takeIf(String::isNotBlank) ?: return
+        val body = lines.drop(1).filter(String::isNotBlank).joinToString("\n")
+        _uiState.update { it.copy(attachment = PendingAttachment(title = title, body = body)) }
     }
 
-    /** 直接发送文本（组合框之外的入口，如预览加载失败回传）。 */
-    fun sendText(text: String, onSessionCreated: (String) -> Unit = {}) {
-        val input = text.trim()
+    fun removeAttachment() {
+        _uiState.update { it.copy(attachment = null) }
+    }
+
+    fun send(onSessionCreated: (String) -> Unit = {}) {
+        val state = _uiState.value
+        val attachment = state.attachment
+        val input = state.input.trim()
         val activeProjectId = projectId ?: return
-        if (input.isEmpty() || _uiState.value.isRunning) return
+        if (input.isEmpty() && attachment == null) return
+        if (state.isRunning) return
+        // 附件正文 + 用户补充文字一起作为消息发出；发送后附件清除。
+        val message = listOfNotNull(
+            attachment?.let { "${it.title}\n${it.body}" },
+            input
+        ).joinToString("\n\n")
 
         val activeSessionId = sessionId ?: UUID.randomUUID().toString().also { createdSessionId ->
             sessionId = createdSessionId
@@ -143,6 +161,7 @@ class ChatViewModel @Inject constructor(
             it.copy(
                 sessionId = activeSessionId,
                 input = "",
+                attachment = null,
                 streamingResponses = emptyList(),
                 streamingText = null,
                 streamingStatus = ChatMessageStatus.WORKING,
@@ -153,9 +172,9 @@ class ChatViewModel @Inject constructor(
         runJob = viewModelScope.launch {
             var agentStarted = false
             try {
-                ensureSession(activeProjectId, activeSessionId, input)
+                ensureSession(activeProjectId, activeSessionId, message)
                 agentStarted = true
-                agentRunner.run(activeProjectId, activeSessionId, input, ::onAgentEvent)
+                agentRunner.run(activeProjectId, activeSessionId, message, ::onAgentEvent)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -255,20 +274,6 @@ private fun ChatUiState.updateStreamingResponse(transform: (StreamingResponse) -
     return copy(streamingResponses = streamingResponses.dropLast(1) + transform(response))
 }
 
-const val ERROR_REPORT_MARKER = "[error-report] "
-
-/**
- * 把错误报告消息文本解析为折叠的 ErrorReport 条目（收起 = 摘要首行，展开 = 时间轴表格）。
- * 非报告消息返回 null，走普通用户消息渲染。
- */
-internal fun String.toErrorReport(id: String): ChatTimelineItem.ErrorReport? {
-    if (!startsWith(ERROR_REPORT_MARKER)) return null
-    val lines = lineSequence().map(String::trimEnd).toList()
-    val summary = lines.first().removePrefix(ERROR_REPORT_MARKER)
-    val body = lines.drop(1).filter(String::isNotBlank).joinToString("\n")
-    return ChatTimelineItem.ErrorReport(id = id, summary = summary, body = body)
-}
-
 /**
  * 检测条目流里「新出现」的回合完成条目。
  * @return 处理到的最大条目 id（下次继续用），以及该回合是否为 COMPLETE 完成。
@@ -292,19 +297,11 @@ internal fun List<SessionEntryEntity>.toTimeline(repository: SessionRepository):
                 val payload = repository.decodeMessage(entry)
                 when (val message = payload.message) {
                     is Message.User -> when (payload.origin) {
-                        MessageOrigin.USER -> {
-                            val text = message.textContent()
-                            val report = text.toErrorReport(entry.id.toString())
-                            if (report != null) {
-                                timeline += report
-                            } else {
-                                timeline += ChatTimelineItem.Message(
-                                    id = entry.id.toString(),
-                                    role = ChatRole.USER,
-                                    text = text
-                                )
-                            }
-                        }
+                        MessageOrigin.USER -> timeline += ChatTimelineItem.Message(
+                            id = entry.id.toString(),
+                            role = ChatRole.USER,
+                            text = message.textContent()
+                        )
                         MessageOrigin.TOOL -> {
                             message.parts
                                 .filterIsInstance<MessagePart.Tool.Result>()

@@ -212,7 +212,7 @@ class ProjectWorkspaceViewModelTest {
 
         val report = fixture.viewModel.buildErrorReportText()
         assertTrue(
-            requireNotNull(report).startsWith("[error-report] Preview load failure — 2 error(s) on missing.html at ")
+            requireNotNull(report).startsWith("Preview load failure — 2 error(s) on missing.html at ")
         )
         assertTrue(report.contains("| # | Time | Error | File |"))
         assertTrue(report.contains("| 1 |"))

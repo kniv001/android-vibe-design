@@ -82,7 +82,6 @@ fun ChatMessageList(
                 when (item) {
                     is ChatTimelineItem.Message -> ChatMessageItem(item)
                     is ChatTimelineItem.Thinking -> ThinkingItem(item)
-                    is ChatTimelineItem.ErrorReport -> ErrorReportItem(item)
                     is ChatTimelineItem.ToolCall -> ToolEventItem(item)
                     is ChatTimelineItem.ToolResult -> ToolEventItem(item)
                 }
