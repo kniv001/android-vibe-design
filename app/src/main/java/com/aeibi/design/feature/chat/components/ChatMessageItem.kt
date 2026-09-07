@@ -2,14 +2,17 @@ package com.aeibi.design.feature.chat.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.aeibi.design.R
 import com.aeibi.design.feature.chat.ChatMessageStatus
 import com.aeibi.design.feature.chat.ChatRole
@@ -50,8 +53,19 @@ fun ChatMessageItem(message: ChatTimelineItem.Message, modifier: Modifier = Modi
             },
             shape = MaterialTheme.shapes.large
         ) {
-            if (isStreamingMarkdown) {
-                val bubbleColor = MaterialTheme.colorScheme.surfaceContainer
+            val bubbleColor = MaterialTheme.colorScheme.surfaceContainer
+            if (message.blocks != null) {
+                // 容器方案：块直渲——无 md 解析层；块列表为空时气泡留白（首块到达前）。
+                if (message.blocks.isNotEmpty()) {
+                    ReplyBlocksView(
+                        blocks = message.blocks,
+                        modifier = Modifier.padding(spacing.sm),
+                        bubbleColor = bubbleColor
+                    )
+                } else {
+                    Spacer(Modifier.width(0.dp))
+                }
+            } else if (isStreamingMarkdown) {
                 StreamingMarkdownText(
                     textDelta = message.textDelta.orEmpty(),
                     modifier = Modifier.padding(spacing.sm),
@@ -59,7 +73,6 @@ fun ChatMessageItem(message: ChatTimelineItem.Message, modifier: Modifier = Modi
                     color = androidx.compose.material3.contentColorFor(bubbleColor)
                 )
             } else if (renderMarkdown) {
-                val bubbleColor = MaterialTheme.colorScheme.surfaceContainer
                 MarkdownText(
                     text = displayedText,
                     modifier = Modifier.padding(spacing.sm),

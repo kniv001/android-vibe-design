@@ -52,7 +52,9 @@ sealed interface ChatTimelineItem {
         val text: String,
         val status: ChatMessageStatus = ChatMessageStatus.COMPLETE,
         /** 流式消息的本次增量（自上次 item 之后新增的文本）——markdown streaming append 用。 */
-        val textDelta: String? = null
+        val textDelta: String? = null,
+        /** 容器方案（reply-container）：非空则按结构化块渲染，text/markdown 路径让位。 */
+        val blocks: List<ReplyBlock>? = null
     ) : ChatTimelineItem
 
     data class Thinking(override val id: String, val text: String, val isStreaming: Boolean = false) : ChatTimelineItem
@@ -80,7 +82,9 @@ data class StreamingResponse(
     val thinkingText: String = "",
     val text: String = "",
     /** 最近一次 TextDelta 增量——供流式 markdown append（text 保留作状态恢复）。 */
-    val lastDelta: String = ""
+    val lastDelta: String = "",
+    /** 容器方案：合成流（#bktest）以块为增量逐块追加——块级流式渲染。 */
+    val blocks: List<ReplyBlock> = emptyList()
 )
 
 /**
@@ -178,7 +182,9 @@ class ChatViewModel @Inject constructor(
                 agentStarted = true
                 // 临时诊断入口（PR 前删除）：#mdtest = token-free 本地合成流式 markdown
                 // 回复——复现真实 LLM 的增量节奏（闭合块解析/迟到生长），测试滚动跟随。
-                if (message.trim() == MD_TEST_COMMAND || message.trim() == MD_TEST_COMMAND_PLAIN) {
+                if (message.trim() == MD_TEST_COMMAND_BLOCKS) {
+                    fakeBlockStream()
+                } else if (message.trim() == MD_TEST_COMMAND || message.trim() == MD_TEST_COMMAND_PLAIN) {
                     fakeMarkdownStream(plain = message.trim() == MD_TEST_COMMAND_PLAIN)
                 } else {
                     agentRunner.run(activeProjectId, activeSessionId, message, ::onAgentEvent)
@@ -203,6 +209,31 @@ class ChatViewModel @Inject constructor(
 
     fun cancel() {
         runJob?.cancel()
+    }
+
+    /**
+     * 临时块流（reply-container 实验）：合成结构化块回复，逐块到达——块级流式。
+     * 与 markdown 合成流同一内容量级，用于对比渲染树成本/滚动表现。PR 前删除。
+     */
+    private suspend fun fakeBlockStream() {
+        onAgentEvent(AgentEvent.ResponseStarted)
+        try {
+            for ((delayMs, block) in FAKE_BLOCK_DOC) {
+                delay(delayMs)
+                _uiState.update { state ->
+                    val current = state.streamingResponses.lastOrNull() ?: return@update state
+                    state.copy(
+                        streamingResponses = state.streamingResponses.dropLast(1) +
+                            current.copy(blocks = current.blocks + block)
+                    )
+                }
+            }
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            _uiState.update {
+                it.copy(streamingResponses = emptyList(), streamingText = null)
+            }
+            throw error
+        }
     }
 
     /**
@@ -265,6 +296,62 @@ class ChatViewModel @Inject constructor(
 
         /** 临时纯文本对照流（PR 前删除）——无 markdown 语法。 */
         const val MD_TEST_COMMAND_PLAIN = "#mdtest-plain"
+
+        /** 容器方案对照流（reply-container 实验，PR 前删除）：结构化块逐块到达。 */
+        const val MD_TEST_COMMAND_BLOCKS = "#bktest"
+
+        /** 合成块文档：与 FAKE_MARKDOWN_DOC 同内容量级，(延迟ms, 块) 序列。 */
+        val FAKE_BLOCK_DOC: List<Pair<Long, ReplyBlock>> = listOf(
+            300L to ReplyBlock.Paragraph(
+                listOf(
+                    InlineRun("这是**本地合成**的一段"),
+                    InlineRun("结构化块", bold = true),
+                    InlineRun("回复，用于在没有 LLM token 消耗的情况下对照块直渲与 markdown 渲染。")
+                )
+            ),
+            500L to ReplyBlock.Heading(2, listOf(InlineRun("块级流式特性"))),
+            500L to ReplyBlock.Paragraph(listOf(InlineRun("每个块到达即渲染，已渲染块永不重绘；不存在「未闭合块」状态——代码块/表格头先到先行。"))),
+            600L to ReplyBlock.BulletList(
+                listOf(
+                    listOf(InlineRun("上划读历史应断开跟随")),
+                    listOf(InlineRun("下滑触底才恢复跟随")),
+                    listOf(InlineRun("按住期间不自动滚动"))
+                )
+            ),
+            700L to ReplyBlock.Heading(2, listOf(InlineRun("一个代码块"))),
+            800L to ReplyBlock.CodeBlock(
+                "kotlin",
+                listOf(
+                    "fun main() {",
+                    "    val messages = listOf(",
+                    "        \"块直渲无解析层\",",
+                    "        \"组件数 = 块数\",",
+                    "        \"流式按块增量\"",
+                    "    )",
+                    "    messages.forEachIndexed { index, text ->",
+                    "        println(\"#\$index \$text\")",
+                    "    }",
+                    "}"
+                )
+            ),
+            700L to ReplyBlock.Paragraph(listOf(InlineRun("表格/更多块类型后续进 v1。收尾：如果这段内容渲染平滑、滚动不卡，容器方向的假设就得到支持。"))),
+            500L to ReplyBlock.Heading(2, listOf(InlineRun("第二个代码块（JSON）"))),
+            800L to ReplyBlock.CodeBlock(
+                "json",
+                listOf(
+                    "{",
+                    "  \"scroll\": {",
+                    "    \"follow\": true,",
+                    "    \"reason\": \"bottom\",",
+                    "    \"locked\": false",
+                    "  },",
+                    "  \"frames\": [1, 2, 3, 4, 5]",
+                    "}"
+                )
+            ),
+            400L to ReplyBlock.Paragraph(listOf(InlineRun("合成结束。"))),
+            0L to ReplyBlock.Paragraph(listOf(InlineRun("本入口随 reply-container 实验清理，不进入正式代码。")))
+        )
 
         /** 纯文本对照文档：长段落，无任何 md 结构。 */
         const val PLAIN_TEST_DOC = """纯文本对照回复。这一整段没有任何 markdown 语法，只有连续的中文句子被逐字流式到达。用于区分 preview 往返的逐行下落是 markdown 渲染树特有的问题，还是所有文本行共有的重排问题。

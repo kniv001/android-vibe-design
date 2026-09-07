@@ -29,7 +29,17 @@ fun ChatScreen(
                     isStreaming = true
                 )
             },
-            response.text.takeIf(String::isNotBlank)?.let {
+            // 容器方案：块非空时以块流渲染；text/markdown 路径让位。
+            response.blocks.takeIf(List<ReplyBlock>::isNotEmpty)?.let {
+                ChatTimelineItem.Message(
+                    id = "streaming-assistant-${response.id}",
+                    role = ChatRole.ASSISTANT,
+                    text = "",
+                    status = ChatMessageStatus.WORKING,
+                    blocks = it
+                )
+            },
+            response.text.takeIf { response.blocks.isEmpty() && it.isNotBlank() }?.let {
                 ChatTimelineItem.Message(
                     id = "streaming-assistant-${response.id}",
                     role = ChatRole.ASSISTANT,
