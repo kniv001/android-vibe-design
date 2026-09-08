@@ -269,6 +269,58 @@ Java_com_aeibi_design_data_versions_git_Libgit2_isDirty(JNIEnv *env, jobject thi
     return dirty;
 }
 
+/* 列出工作区中被 .gitignore 忽略的路径（相对工作区；忽略目录以目录条目返回，
+ * 不递归展开）。恢复整目录替换时用于把这些文件保留下来（git checkout 语义：
+ * 恢复到旧版本不删除 ignored 内容）。 */
+JNIEXPORT jobjectArray JNICALL
+Java_com_aeibi_design_data_versions_git_Libgit2_listIgnored(JNIEnv *env, jobject thiz, jlong handle) {
+    ensure_init();
+    git_repository *repo = handle_to_repo(handle);
+
+    git_status_options options = GIT_STATUS_OPTIONS_INIT;
+    options.show = GIT_STATUS_SHOW_WORKDIR_ONLY;
+    options.flags = GIT_STATUS_OPT_INCLUDE_IGNORED;
+
+    git_status_list *status = NULL;
+    if (git_status_list_new(&status, repo, &options) < 0) {
+        throw_last_error(env, "git status failed");
+        return NULL;
+    }
+    size_t total = git_status_list_entrycount(status);
+    size_t ignored_count = 0;
+    for (size_t i = 0; i < total; i++) {
+        const git_status_entry *entry = git_status_byindex(status, i);
+        if (entry != NULL && (entry->status & GIT_STATUS_IGNORED) != 0) {
+            ignored_count++;
+        }
+    }
+    jclass string_class = (*env)->FindClass(env, "java/lang/String");
+    if (string_class == NULL) {
+        git_status_list_free(status);
+        return NULL;
+    }
+    jobjectArray result = (*env)->NewObjectArray(env, (jsize)ignored_count, string_class, NULL);
+    if (result == NULL) {
+        git_status_list_free(status);
+        return NULL;
+    }
+    size_t out = 0;
+    for (size_t i = 0; i < total; i++) {
+        const git_status_entry *entry = git_status_byindex(status, i);
+        if (entry == NULL || (entry->status & GIT_STATUS_IGNORED) == 0) continue;
+        const char *path = entry->head_to_index ? entry->head_to_index->new_file.path
+                                                : (entry->index_to_workdir ? entry->index_to_workdir->new_file.path : NULL);
+        if (path == NULL) continue;
+        jstring jpath = (*env)->NewStringUTF(env, path);
+        if (jpath != NULL) {
+            (*env)->SetObjectArrayElement(env, result, (jsize)out++, jpath);
+            (*env)->DeleteLocalRef(env, jpath);
+        }
+    }
+    git_status_list_free(status);
+    return result;
+}
+
 JNIEXPORT void JNICALL
 Java_com_aeibi_design_data_versions_git_Libgit2_close(JNIEnv *env, jobject thiz, jlong handle) {
     if (handle != 0) {

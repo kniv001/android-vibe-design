@@ -68,12 +68,35 @@ class GitVersionStorage(
                 check(pending.isDirectory || pending.mkdirs()) { "恢复暂存目录不可用: $pending" }
                 repo.checkoutTreeTo(snapshotId, pending)
 
-                // 2) 复用项目既有的 pending + 原子移动模式整体替换工作区；
+                // 2) 保留 ignored 文件（git checkout 语义：恢复到旧版本不删除 ignored
+                //    内容——它们永不进快照，整目录替换会将其静默删除且不可找回）。
+                //    检出完成后、原子替换前，把当前工作区的 ignored 路径复制进 pending。
+                copyIgnoredIntoPending(repo, workspace, pending)
+
+                // 3) 复用项目既有的 pending + 原子移动模式整体替换工作区；
                 //    旧工作区连同未跟踪/ignored 文件一并消失，不会污染恢复结果。
                 replaceWorkspaceDirectory(projectDir, pending)
 
-                // 3) add_all 具备 add -A 语义，索引与工作区重建对齐后记为新提交。
+                // 4) add_all 具备 add -A 语义，索引与工作区重建对齐后记为新提交。
                 repo.commitAll(encodeMessage(VersionTrigger.RESTORE, label))
+            }
+        }
+    }
+
+    /** 把当前工作区的 ignored 路径复制进 pending（保持相对结构）；失败中止恢复。 */
+    private fun copyIgnoredIntoPending(repo: Libgit2Repository, workspace: File, pending: File) {
+        val ignored = repo.listIgnored()
+        if (ignored.isEmpty()) return
+        ignored.forEach { relative ->
+            val source = File(workspace, relative).normalize()
+            // 相对路径必须留在工作区内（git status 路径天然相对，防御性校验）。
+            require(source.startsWith(workspace)) { "ignored 路径越界: $relative" }
+            val target = File(pending, relative)
+            if (source.isDirectory) {
+                source.copyRecursively(target, overwrite = true)
+            } else if (source.isFile) {
+                target.parentFile?.mkdirs()
+                source.copyTo(target, overwrite = true)
             }
         }
     }

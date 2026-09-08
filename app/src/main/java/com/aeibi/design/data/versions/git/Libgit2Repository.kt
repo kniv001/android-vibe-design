@@ -33,6 +33,9 @@ class Libgit2Repository private constructor(private val handle: Long) : AutoClos
     /** 工作区/索引相对 HEAD 是否有未提交改动（含未跟踪文件；ignored 文件不计）。 */
     fun hasUncommittedChanges(): Boolean = Libgit2.isDirty(handle)
 
+    /** 工作区中被 .gitignore 忽略的路径（相对路径；目录条目不递归展开）。 */
+    fun listIgnored(): List<String> = Libgit2.listIgnored(handle)?.toList().orEmpty()
+
     override fun close() {
         Libgit2.close(handle)
     }

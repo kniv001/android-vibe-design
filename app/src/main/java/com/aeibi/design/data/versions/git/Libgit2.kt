@@ -30,5 +30,11 @@ internal object Libgit2 {
     /** 工作区/索引相对 HEAD 是否有未提交改动（含未跟踪文件；ignored 文件不计）。 */
     external fun isDirty(handle: Long): Boolean
 
+    /**
+     * 列出工作区中被 .gitignore 忽略的路径（相对路径；忽略目录以目录条目返回，
+     * 不递归展开）。恢复整目录替换时用于保留这些文件（git checkout 语义）。
+     */
+    external fun listIgnored(handle: Long): Array<String>?
+
     external fun close(handle: Long)
 }
